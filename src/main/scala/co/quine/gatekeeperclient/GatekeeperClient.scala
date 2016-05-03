@@ -2,33 +2,51 @@ package co.quine.gatekeeperclient
 
 import akka.actor._
 import akka.stream._
-import akka.stream.scaladsl.{Tcp, _}
+import akka.stream.scaladsl._
 import akka.util._
 import java.net.InetSocketAddress
-import java.util.concurrent.atomic.AtomicLong
 
-import co.quine.gatekeeperclient.actors._
-import co.quine.gatekeeperclient.api.Commands
+import scala.collection.mutable
+
 import co.quine.gatekeeperclient.config._
-import co.quine.gatekeeperclient.protocol._
 
-class GatekeeperClient()(implicit system: ActorSystem) extends Commands {
+class GatekeeperClient()(implicit system: ActorSystem) extends Protocol with GateCommands {
   implicit val ec = system.dispatcher
   implicit val materializer = ActorMaterializer()
 
   val host = Config.host
   val port = Config.port
 
-  val gateConnection = system.actorOf(ConnectionActor.props(), s"gate-connection-${GatekeeperClient.tempName()}")
+  val pendingRequests = mutable.Set[GateQuery]()
 
-  val tcp = Tcp().outgoingConnection(new InetSocketAddress(host, port))
-  val src = Source.actorRef[ByteString](10, OverflowStrategy.fail)
-  val sink = Sink.actorRef(gateConnection, Disconnected)
-  val connection = Connection(src.via(tcp).to(sink).run)
-}
+  val tcpConnection = Tcp().outgoingConnection(new InetSocketAddress(host, port))
 
-private[gatekeeperclient] object GatekeeperClient {
-  val tempNumber = new AtomicLong
+  val responseSink = Sink foreach { r: GateResponse =>
+    pendingRequests
+      .filter(query => query.id == r.requestId)
+      .foreach(filteredQuery => filteredQuery.promise.success(r.token))
+  }
 
-  def tempName() = Helpers.base64(tempNumber.getAndIncrement())
+  val tokenRequestOutFlow: Flow[GateQuery, ByteString, _] = Flow[GateQuery] map { query =>
+    pendingRequests += query
+    query.encoded
+  }
+
+  val isCredentialInFlow: Flow[ByteString, ByteString, _] = Flow[ByteString].filter(bs => bs.isCredential)
+
+  val tokenResponseInFlow: Flow[ByteString, GateResponse, _] = Flow[ByteString] map { bs =>
+    val requestId = bs.getRequestId
+    val token = deserializeToken(bs.getRawToken)
+    ResponseToken(requestId, token)
+  }
+
+  val requestSource = {
+    Source.actorRef[GateQuery](50, OverflowStrategy.fail)
+      .via(tokenRequestOutFlow)
+      .via(tcpConnection)
+      .via(isCredentialInFlow)
+      .via(tokenResponseInFlow)
+      .to(responseSink)
+      .run
+  }
 }
