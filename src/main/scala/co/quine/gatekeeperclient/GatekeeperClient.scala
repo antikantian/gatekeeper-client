@@ -1,17 +1,14 @@
 package co.quine.gatekeeperclient
 
-import akka._
 import akka.actor._
 import akka.stream._
 import akka.stream.scaladsl.{Tcp, _}
 import akka.util._
-
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.util.{Failure, Success}
-
 import co.quine.gatekeeperclient.actors._
+import co.quine.gatekeeperclient.api.Commands
 import co.quine.gatekeeperclient.config._
 import co.quine.gatekeeperclient.protocol._
 
@@ -34,5 +31,4 @@ private[gatekeeperclient] object GatekeeperClient {
   val tempNumber = new AtomicLong
 
   def tempName() = Helpers.base64(tempNumber.getAndIncrement())
-
 }

@@ -1,8 +1,10 @@
-package co.quine.gatekeeperclient
+package co.quine.gatekeeperclient.api
 
 import akka.actor._
-import scala.concurrent._
 import co.quine.gatekeeperclient.protocol._
+import co.quine.gatekeeperclient.{FollowersIds, FollowersList, FriendsIds, FriendsList, StatusesLookup, StatusesShow, StatusesUserTimeline, UsersLookup, UsersShow, FollowersIds => _, FollowersList => _, FriendsIds => _, FriendsList => _, StatusesShow => _, StatusesUserTimeline => _, _}
+
+import scala.concurrent._
 
 trait Commands {
   self: GatekeeperClient =>
