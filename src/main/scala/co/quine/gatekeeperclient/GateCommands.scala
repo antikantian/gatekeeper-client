@@ -11,6 +11,8 @@ trait GateCommands {
     promise.future
   }
 
+  def consumerToken: Future[GateToken] = get(Consumer)
+
   def usersShow: Future[GateToken] = get(UsersShow)
 
   def usersLookup: Future[GateToken] = get(UsersLookup)

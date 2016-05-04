@@ -5,6 +5,10 @@ trait TwitterResources {
     val serverCommand: String
   }
 
+  case object Consumer extends TwitterResource {
+    val serverCommand = "CONSUMER"
+  }
+
   case object UsersLookup extends TwitterResource {
     val serverCommand = "ULOOKUP"
   }

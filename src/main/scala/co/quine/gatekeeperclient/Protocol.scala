@@ -13,7 +13,9 @@ trait Protocol extends TwitterResources {
   val LS_STRING = "\r\n"
   val LS = LS_STRING.getBytes(UTF8_CHARSET)
 
-  val ERROR = '-'
+  val COMMAND = '+'
+  val REQUEST = '-'
+  val UPDATE = '!'
   val UNAVAILABLE = '*'
   val CONSUMERTOKEN = '&'
   val ACCESSTOKEN = '@'
@@ -33,6 +35,7 @@ trait Protocol extends TwitterResources {
     def encoded = ByteString(s"$id#${resource.serverCommand}$LS_STRING")
   }
 
+  case class ConsumerRequest()
   case class TokenRequest(resource: TwitterResource, promise: Promise[GateToken]) extends GateQuery
 
   sealed trait GateResponse {
@@ -41,6 +44,18 @@ trait Protocol extends TwitterResources {
   }
 
   case class ResponseToken(requestId: String, token: GateToken) extends GateResponse
+
+  sealed trait MessageToGate {
+    val queryId: String
+
+    def encoded: ByteString
+  }
+
+  case class RateLimitUpdate(queryId: String, remaining: Int, reset: Long) extends MessageToGate {
+
+    def encoded = ByteString(s"$queryId#RLUPDATE!$remaining:$reset$LS_STRING")
+
+  }
 
   def deserializeToken(t: String): GateToken = t.head match {
     case UNAVAILABLE => decodeUnavailable(t.tail)
