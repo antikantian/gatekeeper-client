@@ -10,7 +10,7 @@ import scala.collection.mutable
 
 import co.quine.gatekeeperclient.config._
 
-class GatekeeperClient()(implicit system: ActorSystem) extends Protocol with GateCommands {
+class GatekeeperClient()(implicit system: ActorSystem) extends Protocol with GateCommands with GateUpdates {
   implicit val ec = system.dispatcher
   implicit val materializer = ActorMaterializer()
 

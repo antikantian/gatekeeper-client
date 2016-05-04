@@ -1,12 +1,9 @@
 package co.quine.gatekeeperclient
 
-import scala.concurrent._
-
 trait GateUpdates {
   self: GatekeeperClient =>
 
-  def updateRateLimit()
-
-
-
+  def updateRateLimit(queryId: String, remaining: Int, reset: Long) = {
+    requestSource ! RateLimitUpdate(queryId, remaining, reset).encoded
+  }
 }
