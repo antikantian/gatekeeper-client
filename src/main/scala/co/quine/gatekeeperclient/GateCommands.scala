@@ -5,30 +5,30 @@ import scala.concurrent._
 trait GateCommands {
   self: GatekeeperClient =>
 
-  def get(resource: TwitterResource): Future[GateToken] = {
-    val promise = Promise[GateToken]()
+  def get(resource: TwitterResource): Future[GateResponse] = {
+    val promise = Promise[GateResponse]()
     requestSource ! TokenRequest(resource, promise)
     promise.future
   }
 
-  def consumerToken: Future[GateToken] = get(Consumer)
+  def consumerToken: Future[GateResponse] = get(Consumer)
 
-  def usersShow: Future[GateToken] = get(UsersShow)
+  def usersShow: Future[GateResponse] = get(UsersShow)
 
-  def usersLookup: Future[GateToken] = get(UsersLookup)
+  def usersLookup: Future[GateResponse] = get(UsersLookup)
 
-  def statusesLookup: Future[GateToken] = get(StatusesLookup)
+  def statusesLookup: Future[GateResponse] = get(StatusesLookup)
 
-  def statusesShow: Future[GateToken] = get(StatusesShow)
+  def statusesShow: Future[GateResponse] = get(StatusesShow)
 
-  def statusesUserTimeline: Future[GateToken] = get(StatusesUserTimeline)
+  def statusesUserTimeline: Future[GateResponse] = get(StatusesUserTimeline)
 
-  def friendsIds: Future[GateToken] = get(FriendsIds)
+  def friendsIds: Future[GateResponse] = get(FriendsIds)
 
-  def friendsList: Future[GateToken] = get(FriendsList)
+  def friendsList: Future[GateResponse] = get(FriendsList)
 
-  def followersIds: Future[GateToken] = get(FollowersIds)
+  def followersIds: Future[GateResponse] = get(FollowersIds)
 
-  def followersList: Future[GateToken] = get(FollowersList)
+  def followersList: Future[GateResponse] = get(FollowersList)
 
 }

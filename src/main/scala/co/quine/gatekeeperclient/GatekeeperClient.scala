@@ -24,7 +24,7 @@ class GatekeeperClient()(implicit system: ActorSystem) extends Protocol with Gat
   val responseSink = Sink foreach { r: GateResponse =>
     pendingRequests
       .filter(query => query.id == r.requestId)
-      .foreach(filteredQuery => filteredQuery.promise.success(r.token))
+      .foreach(filteredQuery => filteredQuery.promise.success(r))
   }
 
   val tokenRequestOutFlow: Flow[GateQuery, ByteString, _] = Flow[GateQuery] map { query =>

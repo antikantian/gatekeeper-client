@@ -30,13 +30,13 @@ trait Protocol extends TwitterResources {
   sealed trait GateQuery {
     val id = java.util.UUID.randomUUID.toString
     val resource: TwitterResource
-    val promise: Promise[GateToken]
+    val promise: Promise[GateResponse]
 
     def encoded = ByteString(s"$id#${resource.serverCommand}$LS_STRING")
   }
 
   case class ConsumerRequest()
-  case class TokenRequest(resource: TwitterResource, promise: Promise[GateToken]) extends GateQuery
+  case class TokenRequest(resource: TwitterResource, promise: Promise[GateResponse]) extends GateQuery
 
   sealed trait GateResponse {
     val requestId: String
