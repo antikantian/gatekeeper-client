@@ -1,52 +1,61 @@
 package co.quine.gatekeeperclient
 
 import akka.actor._
-import akka.stream._
-import akka.stream.scaladsl._
-import akka.util._
-import java.net.InetSocketAddress
+import scala.concurrent.{Future, Promise}
+import co.quine.gatekeeperclient.actors._
 
-import scala.collection.mutable
+object GatekeeperClient {
 
-import co.quine.gatekeeperclient.config._
+  import co.quine.gatekeeper.Codec._
 
-class GatekeeperClient()(implicit system: ActorSystem) extends Protocol with GateCommands with GateUpdates {
-  implicit val ec = system.dispatcher
-  implicit val materializer = ActorMaterializer()
+  case class PendingRequest(request: Request, promise: Promise[Respondable])
+}
 
-  val host = Config.host
-  val port = Config.port
+class GatekeeperClient() {
 
-  val pendingRequests = mutable.Set[GateQuery]()
+  import GatekeeperClient._
+  import co.quine.gatekeeper.Codec._
 
-  val tcpConnection = Tcp().outgoingConnection(new InetSocketAddress(host, port))
+  implicit val system = ActorSystem("gatekeeper-client")
 
-  val responseSink = Sink foreach { r: GateResponse =>
-    pendingRequests
-      .filter(query => query.id == r.requestId)
-      .foreach(filteredQuery => filteredQuery.promise.success(r))
+  val clientActor = system.actorOf(ClientActor.props, "client")
+
+  def get(request: Requestable): Future[Respondable] = {
+    val promise = Promise[Respondable]()
+    val uuid = java.util.UUID.randomUUID.toString
+    val toSend = request match {
+      case x: TwitterResource => TokenRequest(uuid, x)
+      case x@ConsumerToken => ConsumerRequest(uuid, x)
+      case x@BearerToken => NewBearerRequest(uuid, x)
+    }
+    clientActor ! PendingRequest(toSend, promise)
+    promise.future
   }
 
-  val tokenRequestOutFlow: Flow[GateQuery, ByteString, _] = Flow[GateQuery] map { query =>
-    pendingRequests += query
-    query.encoded
+  def send[A <: Update](u: A) = clientActor ! u
+
+  def consumerToken: Future[Respondable] = get(ConsumerToken)
+
+  def usersShow: Future[Respondable] = get(UsersShow)
+
+  def usersLookup: Future[Respondable] = get(UsersLookup)
+
+  def statusesLookup: Future[Respondable] = get(StatusesLookup)
+
+  def statusesShow: Future[Respondable] = get(StatusesShow)
+
+  def statusesUserTimeline: Future[Respondable] = get(StatusesUserTimeline)
+
+  def friendsIds: Future[Respondable] = get(FriendsIds)
+
+  def friendsList: Future[Respondable] = get(FriendsList)
+
+  def followersIds: Future[Respondable] = get(FollowersIds)
+
+  def followersList: Future[Respondable] = get(FollowersList)
+
+  def updateRateLimit(t: Token, r: TwitterResource, remaining: Int, reset: Long) = {
+    send(RateLimit(t, r, remaining, reset))
   }
 
-  val isCredentialInFlow: Flow[ByteString, ByteString, _] = Flow[ByteString].filter(bs => bs.isCredential)
-
-  val tokenResponseInFlow: Flow[ByteString, GateResponse, _] = Flow[ByteString] map { bs =>
-    val requestId = bs.getRequestId
-    val token = deserializeToken(bs.getRawToken)
-    ResponseToken(requestId, token)
-  }
-
-  val requestSource = {
-    Source.actorRef[GateQuery](50, OverflowStrategy.fail)
-      .via(tokenRequestOutFlow)
-      .via(tcpConnection)
-      .via(isCredentialInFlow)
-      .via(tokenResponseInFlow)
-      .to(responseSink)
-      .run
-  }
 }

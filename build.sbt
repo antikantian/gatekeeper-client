@@ -2,7 +2,7 @@ name := "gatekeeper-client"
 
 organization := "co.quine"
 
-version := "0.0.2"
+version := "0.0.3"
 
 scalaVersion := "2.11.8"
 
@@ -27,11 +27,13 @@ lazy val versions = new {
   val akka = "2.4.3"
   val config = "1.3.0"
   val scalaj = "2.3.0"
+  val gatekeeper = "0.0.2"
 }
 
 libraryDependencies ++= Seq(
   "com.typesafe"                 % "config" % versions.config,
   "org.scalaj"                  %% "scalaj-http" % versions.scalaj,
   "com.typesafe.akka"           %% "akka-actor" % versions.akka,
-  "com.typesafe.akka"           %% "akka-stream" % versions.akka
+  "com.typesafe.akka"           %% "akka-stream" % versions.akka,
+  "co.quine"                    %% "gatekeeper" % versions.gatekeeper changing()
 )
