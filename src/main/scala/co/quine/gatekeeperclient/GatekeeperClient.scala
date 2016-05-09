@@ -32,7 +32,7 @@ class GatekeeperClient() {
     promise.future
   }
 
-  def send[A <: Update](u: A) = clientActor ! u
+  def send(update: Update) = clientActor ! update
 
   def consumerToken: Future[Respondable] = get(ConsumerToken)
 

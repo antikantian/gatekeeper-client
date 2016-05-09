@@ -62,7 +62,7 @@ class ClientActor extends Actor with ActorLogging {
     encodeThenSend(r.request)
   }
 
-  def encodeThenSend(s: Sendable) = {
+  private def encodeThenSend(s: Sendable) = {
     gate ! Write(s.encode)
   }
 
