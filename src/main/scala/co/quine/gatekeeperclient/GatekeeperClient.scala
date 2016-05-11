@@ -35,7 +35,7 @@ object GatekeeperClient {
     def serialize = s"+|RATELIMIT|$key:$resource:$remaining:$reset"
   }
 
-  case class Operation(request: Request, promise: Promise[GateReply])
+  case class Operation[T <: GateReply](request: Request, promise: Promise[T])
 }
 
 class GatekeeperClient() {
@@ -47,16 +47,13 @@ class GatekeeperClient() {
   val clientActor = system.actorOf(ClientActor.props, "client")
   val updateActor = system.actorOf(UpdateSenderActor.props, "updater")
 
-  def get(request: Request): Future[GateReply] = {
-    val promise = Promise[GateReply]()
+  def get[T <: GateReply](request: Request): Future[T] = {
+    val promise = Promise[T]()
     clientActor ! Operation(request, promise)
     promise.future
   }
 
-  def consumerToken: Future[Either[RateLimitReached, ConsumerToken]] = get(Request("CONSUMER")) collect {
-    case token: ConsumerToken => Right(token)
-    case ratelimit: RateLimitReached => Left(ratelimit)
-  }
+  def consumerToken: Future[ConsumerToken] = get(Request("CONSUMER"))
 
   def usersShow: Future[GateReply] = get(Request("GRANT", "USHOW"))
 
@@ -76,13 +73,9 @@ class GatekeeperClient() {
 
   def followersList: Future[GateReply] = get(Request("GRANT", "FOLIST"))
 
-  def remaining(resource: String): Future[Int] = get(Request("REM", resource.toUpperCase)) collect {
-    case Remaining(num) => num
-  }
+  def remaining(resource: String): Future[Remaining] = get(Request("REM", resource.toUpperCase))
 
-  def ttl(resource: String): Future[Long] = get(Request("TTL", resource.toUpperCase)) collect {
-    case TTL(time) => time
-  }
+  def ttl(resource: String): Future[TTL] = get(Request("TTL", resource.toUpperCase))
 
   def updateRateLimit(key: String, resource: String, remaining: Int, reset: Long) = {
     updateActor ! RateLimitUpdate(key, resource, remaining, reset)

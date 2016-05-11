@@ -32,7 +32,7 @@ class ClientActor extends Actor with ActorLogging {
   val port = Config.port
   val tcpActor = IO(Tcp)(context.system)
 
-  val pendingRequests = mutable.ArrayBuffer[Operation]()
+  val pendingRequests = mutable.ArrayBuffer[Operation[GateReply]]()
 
   var gate: ActorRef = _
 
@@ -61,7 +61,7 @@ class ClientActor extends Actor with ActorLogging {
   }
 
   def operation: Receive = {
-    case op: Operation =>
+    case op: Operation[GateReply] =>
       pendingRequests.append(op)
       gate ! Write(ByteString(op.request.serialize))
   }
