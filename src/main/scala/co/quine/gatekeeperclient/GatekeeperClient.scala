@@ -53,7 +53,10 @@ class GatekeeperClient() {
     promise.future
   }
 
-  def consumerToken: Future[GateReply] = get(Request("CONSUMER"))
+  def consumerToken: Future[Either[RateLimitReached, ConsumerToken]] = get(Request("CONSUMER")) collect {
+    case token: ConsumerToken => Right(token)
+    case ratelimit: RateLimitReached => Left(ratelimit)
+  }
 
   def usersShow: Future[GateReply] = get(Request("GRANT", "USHOW"))
 
