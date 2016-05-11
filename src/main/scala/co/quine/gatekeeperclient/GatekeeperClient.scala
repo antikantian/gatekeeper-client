@@ -1,61 +1,87 @@
 package co.quine.gatekeeperclient
 
 import akka.actor._
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Future, Promise}
 import co.quine.gatekeeperclient.actors._
 
 object GatekeeperClient {
 
-  import co.quine.gatekeeper.Codec._
+  sealed trait GateReply
+  sealed trait Token extends GateReply {
+    val key: String
+  }
 
-  case class PendingRequest(request: Request, promise: Promise[Respondable])
+  case class AccessToken(key: String, secret: String) extends Token
+  case class ConsumerToken(key: String, secret: String) extends Token
+  case class BearerToken(key: String) extends Token
+
+  case class Unavailable(ttl: Long) extends GateReply
+
+  case class Remaining(num: Int) extends GateReply
+  case class TTL(time: Long) extends GateReply
+
+  sealed trait Error extends GateReply
+  case class RateLimitReached(ttl: Long) extends Error
+
+  case class Request(cmd: String, args: String = "None") {
+    val typeId = '?'
+    val uuid = java.util.UUID.randomUUID.toString
+
+    def serialize = s"$typeId|#$uuid|$cmd:$args"
+  }
+
+  case class RateLimitUpdate(key: String, resource: String, remaining: Int, reset: Long) {
+    def serialize = s"+|RATELIMIT|$key:$resource:$remaining:$reset"
+  }
+
+  case class Operation(request: Request, promise: Promise[GateReply])
 }
 
 class GatekeeperClient() {
 
   import GatekeeperClient._
-  import co.quine.gatekeeper.Codec._
 
   implicit val system = ActorSystem("gatekeeper-client")
 
   val clientActor = system.actorOf(ClientActor.props, "client")
+  val updateActor = system.actorOf(UpdateSenderActor.props, "updater")
 
-  def get(request: Requestable): Future[Respondable] = {
-    val promise = Promise[Respondable]()
-    val uuid = java.util.UUID.randomUUID.toString
-    val toSend = request match {
-      case x: TwitterResource => TokenRequest(uuid, x)
-      case x@ConsumerToken => ConsumerRequest(uuid, x)
-      case x@BearerToken => NewBearerRequest(uuid, x)
-    }
-    clientActor ! PendingRequest(toSend, promise)
+  def get(request: Request): Future[GateReply] = {
+    val promise = Promise[GateReply]()
+    clientActor ! Operation(request, promise)
     promise.future
   }
 
-  def send(update: Update) = clientActor ! update
+  def consumerToken: Future[GateReply] = get(Request("CONSUMER"))
 
-  def consumerToken: Future[Respondable] = get(ConsumerToken)
+  def usersShow: Future[GateReply] = get(Request("GRANT", "USHOW"))
 
-  def usersShow: Future[Respondable] = get(UsersShow)
+  def usersLookup: Future[GateReply] = get(Request("GRANT", "ULOOKUP"))
 
-  def usersLookup: Future[Respondable] = get(UsersLookup)
+  def statusesLookup: Future[GateReply] = get(Request("GRANT", "SLOOKUP"))
 
-  def statusesLookup: Future[Respondable] = get(StatusesLookup)
+  def statusesShow: Future[GateReply] = get(Request("GRANT", "SSHOW"))
 
-  def statusesShow: Future[Respondable] = get(StatusesShow)
+  def statusesUserTimeline: Future[GateReply] = get(Request("GRANT", "SUSERTIMELINE"))
 
-  def statusesUserTimeline: Future[Respondable] = get(StatusesUserTimeline)
+  def friendsIds: Future[GateReply] = get(Request("GRANT", "FRIDS"))
 
-  def friendsIds: Future[Respondable] = get(FriendsIds)
+  def friendsList: Future[GateReply] = get(Request("GRANT", "FRLIST"))
 
-  def friendsList: Future[Respondable] = get(FriendsList)
+  def followersIds: Future[GateReply] = get(Request("GRANT", "FOIDS"))
 
-  def followersIds: Future[Respondable] = get(FollowersIds)
+  def followersList: Future[GateReply] = get(Request("GRANT", "FOLIST"))
 
-  def followersList: Future[Respondable] = get(FollowersList)
-
-  def updateRateLimit(t: Token, r: TwitterResource, remaining: Int, reset: Long) = {
-    send(RateLimit(t, r, remaining, reset))
+  def remaining(resource: String): Future[Int] = get(Request("REM", resource.toUpperCase)) collect {
+    case Remaining(num) => num
   }
 
+  def ttl(resource: String): Future[Long] = get(Request("TTL", resource.toUpperCase)) collect {
+    case TTL(time) => time
+  }
+
+  def updateRateLimit(key: String, resource: String, remaining: Int, reset: Long) = {
+    updateActor ! RateLimitUpdate(key, resource, remaining, reset)
+  }
 }
