@@ -1,7 +1,6 @@
 package co.quine.gatekeeperclient
 
 import akka.actor._
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{Future, Promise}
 import co.quine.gatekeeperclient.actors._
 
@@ -36,13 +35,18 @@ object GatekeeperClient {
   }
 
   case class Operation[T <: GateReply](request: Request, promise: Promise[T])
+
+  def apply(implicit actorSystem: Option[ActorSystem] = None) = new GatekeeperClient(actorSystem)
 }
 
-class GatekeeperClient() {
+class GatekeeperClient(actorSystem: Option[ActorSystem] = None) {
 
   import GatekeeperClient._
 
-  implicit val system = ActorSystem("gatekeeper-client")
+  implicit val system = actorSystem match {
+    case Some(x) => x
+    case None => ActorSystem("gatekeeper-client")
+  }
 
   val clientActor = system.actorOf(ClientActor.props, "client")
   val updateActor = system.actorOf(UpdateSenderActor.props, "updater")
