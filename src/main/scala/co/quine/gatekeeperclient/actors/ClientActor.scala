@@ -42,7 +42,7 @@ class ClientActor extends Actor with ActorLogging {
     tcpActor ! Connect(new InetSocketAddress(host, port))
   }
 
-  def receive = connecting orElse connected
+  def receive = connecting
 
   def connecting: Receive = {
     case c: Connected =>

@@ -2,6 +2,7 @@ package co.quine.gatekeeperclient
 
 import akka.actor._
 import scala.concurrent.{Future, Promise}
+import scala.concurrent.ExecutionContext.Implicits.global
 import co.quine.gatekeeperclient.actors._
 
 object GatekeeperClient {
@@ -9,13 +10,19 @@ object GatekeeperClient {
   sealed trait GateReply
   sealed trait Token extends GateReply {
     val key: String
+    val secret: String
   }
 
   case class AccessToken(key: String, secret: String) extends Token
   case class ConsumerToken(key: String, secret: String) extends Token
-  case class BearerToken(key: String) extends Token
+  case class BearerToken(key: String) extends Token {
+    val secret: Nothing = throw new NoSuchElementException("BearerToken.secret")
+  }
 
-  case class Unavailable(ttl: Long) extends GateReply
+  case class Unavailable(ttl: Long) extends Token {
+    val key: Nothing = throw new NoSuchElementException("BearerToken.secret")
+    val secret: Nothing = throw new NoSuchElementException("BearerToken.secret")
+  }
 
   case class Remaining(num: Int) extends GateReply
   case class TTL(time: Long) extends GateReply
@@ -59,25 +66,25 @@ class GatekeeperClient(actorSystem: Option[ActorSystem] = None) {
 
   def consumerToken: Future[ConsumerToken] = get(Request("CONSUMER"))
 
-  def usersShow: Future[GateReply] = get(Request("GRANT", "USHOW"))
+  def usersShow: Future[Token] = get(Request("GRANT", "USHOW"))
 
-  def usersLookup: Future[GateReply] = get(Request("GRANT", "ULOOKUP"))
+  def usersLookup: Future[Token] = get(Request("GRANT", "ULOOKUP"))
 
-  def statusesLookup: Future[GateReply] = get(Request("GRANT", "SLOOKUP"))
+  def statusesLookup: Future[Token] = get(Request("GRANT", "SLOOKUP"))
 
-  def statusesShow: Future[GateReply] = get(Request("GRANT", "SSHOW"))
+  def statusesShow: Future[Token] = get(Request("GRANT", "SSHOW"))
 
-  def statusesUserTimeline: Future[GateReply] = get(Request("GRANT", "SUSERTIMELINE"))
+  def statusesUserTimeline: Future[Token] = get(Request("GRANT", "SUSERTIMELINE"))
 
-  def friendsIds: Future[GateReply] = get(Request("GRANT", "FRIDS"))
+  def friendsIds: Future[Token] = get(Request("GRANT", "FRIDS"))
 
-  def friendsList: Future[GateReply] = get(Request("GRANT", "FRLIST"))
+  def friendsList: Future[Token] = get(Request("GRANT", "FRLIST"))
 
-  def followersIds: Future[GateReply] = get(Request("GRANT", "FOIDS"))
+  def followersIds: Future[Token] = get(Request("GRANT", "FOIDS"))
 
-  def followersList: Future[GateReply] = get(Request("GRANT", "FOLIST"))
+  def followersList: Future[Token] = get(Request("GRANT", "FOLIST"))
 
-  def remaining(resource: String): Future[Remaining] = get(Request("REM", resource.toUpperCase))
+  def remaining(resource: String): Future[Int] = get(Request("REM", resource.toUpperCase)).map((r: Remaining) => r.num)
 
   def ttl(resource: String): Future[TTL] = get(Request("TTL", resource.toUpperCase))
 
