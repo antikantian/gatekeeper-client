@@ -59,6 +59,8 @@ class GatekeeperClient(actorSystem: Option[ActorSystem] = None) {
   val clientActor = system.actorOf(ClientActor.props, "client")
   val updateActor = system.actorOf(UpdateSenderActor.props, "updater")
 
+  lazy val defaultConsumer = get[ConsumerToken](Request("CONSUMER"))
+
   def get[T <: GateReply](request: Request): T = {
     val promise = Promise[T]()
     clientActor ! Operation(request, promise)
@@ -67,7 +69,7 @@ class GatekeeperClient(actorSystem: Option[ActorSystem] = None) {
 
   def consumerToken: ConsumerToken = get[ConsumerToken](Request("CONSUMER"))
 
-  def usersShow: Token = get[Token](Request("GRANT", "USHOW"))
+  def usersShow: Token = get(Request("GRANT", "USHOW"))
 
   def usersLookup: Token = get(Request("GRANT", "ULOOKUP"))
 
