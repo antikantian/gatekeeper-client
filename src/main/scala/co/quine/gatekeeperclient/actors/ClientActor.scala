@@ -38,7 +38,7 @@ class ClientActor extends Actor with ActorLogging {
 
   override def preStart() = {
     if (gate != null) gate ! Close
-    log.info(s"Connecting to $host")
+    log.debug(s"Connecting to $host")
     tcpActor ! Connect(new InetSocketAddress(host, port))
   }
 
@@ -48,7 +48,7 @@ class ClientActor extends Actor with ActorLogging {
     case c: Connected =>
       gate = sender()
       gate ! Register(self)
-      log.info("Connected to: " + c.remoteAddress)
+      log.debug("Connected to: " + c.remoteAddress)
       context.become(connected)
   }
 
@@ -56,7 +56,7 @@ class ClientActor extends Actor with ActorLogging {
 
   def tcp: Receive = {
     case Received(bs) =>
-      log.info("Received: " + bs.utf8String)
+      log.debug("Received: " + bs.utf8String)
       onData(bs)
   }
 

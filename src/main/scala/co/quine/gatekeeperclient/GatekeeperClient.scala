@@ -1,7 +1,8 @@
 package co.quine.gatekeeperclient
 
 import akka.actor._
-import scala.concurrent.{Future, Promise}
+import scala.concurrent.{Await, Future, Promise}
+import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 import co.quine.gatekeeperclient.actors._
 
@@ -58,35 +59,35 @@ class GatekeeperClient(actorSystem: Option[ActorSystem] = None) {
   val clientActor = system.actorOf(ClientActor.props, "client")
   val updateActor = system.actorOf(UpdateSenderActor.props, "updater")
 
-  def get[T <: GateReply](request: Request): Future[T] = {
+  def get[T <: GateReply](request: Request): T = {
     val promise = Promise[T]()
     clientActor ! Operation(request, promise)
-    promise.future
+    Await.result(promise.future, 5.seconds)
   }
 
-  def consumerToken: Future[ConsumerToken] = get(Request("CONSUMER"))
+  def consumerToken: ConsumerToken = get[ConsumerToken](Request("CONSUMER"))
 
-  def usersShow: Future[Token] = get(Request("GRANT", "USHOW"))
+  def usersShow: Token = get[Token](Request("GRANT", "USHOW"))
 
-  def usersLookup: Future[Token] = get(Request("GRANT", "ULOOKUP"))
+  def usersLookup: Token = get(Request("GRANT", "ULOOKUP"))
 
-  def statusesLookup: Future[Token] = get(Request("GRANT", "SLOOKUP"))
+  def statusesLookup: Token = get(Request("GRANT", "SLOOKUP"))
 
-  def statusesShow: Future[Token] = get(Request("GRANT", "SSHOW"))
+  def statusesShow: Token = get(Request("GRANT", "SSHOW"))
 
-  def statusesUserTimeline: Future[Token] = get(Request("GRANT", "SUSERTIMELINE"))
+  def statusesUserTimeline: Token = get(Request("GRANT", "SUSERTIMELINE"))
 
-  def friendsIds: Future[Token] = get(Request("GRANT", "FRIDS"))
+  def friendsIds: Token = get(Request("GRANT", "FRIDS"))
 
-  def friendsList: Future[Token] = get(Request("GRANT", "FRLIST"))
+  def friendsList: Token = get(Request("GRANT", "FRLIST"))
 
-  def followersIds: Future[Token] = get(Request("GRANT", "FOIDS"))
+  def followersIds: Token = get(Request("GRANT", "FOIDS"))
 
-  def followersList: Future[Token] = get(Request("GRANT", "FOLIST"))
+  def followersList: Token = get(Request("GRANT", "FOLIST"))
 
-  def remaining(resource: String): Future[Int] = get(Request("REM", resource.toUpperCase)).map((r: Remaining) => r.num)
+  def remaining(resource: String): Int = get[Remaining](Request("REM", resource.toUpperCase)).num
 
-  def ttl(resource: String): Future[TTL] = get(Request("TTL", resource.toUpperCase))
+  def ttl(resource: String): Long = get[TTL](Request("TTL", resource.toUpperCase)).time
 
   def updateRateLimit(key: String, resource: String, remaining: Int, reset: Long) = {
     updateActor ! RateLimitUpdate(key, resource, remaining, reset)
