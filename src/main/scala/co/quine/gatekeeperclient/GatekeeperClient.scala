@@ -25,6 +25,7 @@ object GatekeeperClient {
     val secret: Nothing = throw new NoSuchElementException("BearerToken.secret")
   }
 
+  case class ConnectedClients(clients: Seq[String]) extends GateReply
   case class Remaining(num: Int) extends GateReply
   case class TTL(time: Long) extends GateReply
 
@@ -66,6 +67,8 @@ class GatekeeperClient(actorSystem: Option[ActorSystem] = None) {
     clientActor ! Operation(request, promise)
     Await.result(promise.future, 5.seconds)
   }
+
+  def clients: Seq[String] = get[ConnectedClients](Request("CLIENTS")).clients
 
   def consumerToken: ConsumerToken = get[ConsumerToken](Request("CONSUMER"))
 

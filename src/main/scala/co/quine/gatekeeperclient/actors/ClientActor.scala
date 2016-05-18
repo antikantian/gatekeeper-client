@@ -99,6 +99,7 @@ class ClientActor extends Actor with ActorLogging {
 
   private def parseUpdate(u: String) = u.split(':') match {
     case Array(update, payload) => update match {
+      case "CLIENTS" => ConnectedClients(payload.split(',').toSeq)
       case "REM" => Remaining(payload.toInt)
       case "TTL" => TTL(payload.toLong)
     }
