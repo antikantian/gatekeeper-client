@@ -10,19 +10,19 @@ object GatekeeperClient {
 
   sealed trait GateReply
   sealed trait Token extends GateReply {
-    val key: String
-    val secret: String
+    def key: String
+    def secret: String
   }
 
   case class AccessToken(key: String, secret: String) extends Token
   case class ConsumerToken(key: String, secret: String) extends Token
   case class BearerToken(key: String) extends Token {
-    val secret: Nothing = throw new NoSuchElementException("BearerToken.secret")
+    def secret: Nothing = throw new NoSuchElementException("BearerToken.secret")
   }
 
   case class Unavailable(ttl: Long) extends Token {
-    val key: Nothing = throw new NoSuchElementException("BearerToken.secret")
-    val secret: Nothing = throw new NoSuchElementException("BearerToken.secret")
+    def key: Nothing = throw new NoSuchElementException("Unavailable.key")
+    def secret: Nothing = throw new NoSuchElementException("Unavailable.secret")
   }
 
   case class ConnectedClients(clients: Seq[String]) extends GateReply
