@@ -1,6 +1,7 @@
 package co.quine.gatekeeperclient
 
 import akka.actor._
+import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.{Await, Future, Promise}
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -45,6 +46,10 @@ object GatekeeperClient {
 
   case class Operation[T <: GateReply](request: Request, promise: Promise[T])
 
+  val tempNumber = new AtomicLong(1)
+
+  def tempName = tempNumber.getAndIncrement
+
   def apply(implicit actorSystem: Option[ActorSystem] = None) = new GatekeeperClient(actorSystem)
 }
 
@@ -57,8 +62,8 @@ class GatekeeperClient(actorSystem: Option[ActorSystem] = None) {
     case None => ActorSystem("gatekeeper-client")
   }
 
-  val clientActor = system.actorOf(ClientActor.props, "client")
-  val updateActor = system.actorOf(UpdateSenderActor.props, "updater")
+  val clientActor = system.actorOf(ClientActor.props, s"client-$tempName")
+  val updateActor = system.actorOf(UpdateSenderActor.props, s"updater-$tempName")
 
   lazy val defaultConsumer = get[ConsumerToken](Request("CONSUMER"))
 

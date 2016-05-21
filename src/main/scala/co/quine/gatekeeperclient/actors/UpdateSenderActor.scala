@@ -17,7 +17,10 @@ class UpdateSenderActor extends Actor with ActorLogging {
   import GatekeeperClient._
   import context.system
 
-  val remote = new InetSocketAddress(Config.host, Config.port)
+  val host = Config.host
+  val port = Config.port
+
+  val remote = new InetSocketAddress(host, port)
 
   IO(Udp) ! Udp.SimpleSender
 

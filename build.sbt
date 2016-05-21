@@ -33,5 +33,6 @@ libraryDependencies ++= Seq(
   "com.typesafe"                 % "config" % versions.config,
   "org.scalaj"                  %% "scalaj-http" % versions.scalaj,
   "com.typesafe.akka"           %% "akka-actor" % versions.akka,
-  "com.typesafe.akka"           %% "akka-stream" % versions.akka
+  "com.typesafe.akka"           %% "akka-stream" % versions.akka,
+  "com.github.nscala-time"      %% "nscala-time" % "2.12.0"
 )
