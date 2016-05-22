@@ -26,6 +26,7 @@ class ReadBufferActor(sendTo: ActorRef) extends Actor with ActorLogging {
       readBuffer(List.empty[ByteString]).foreach(sendTo ! Packet(_))
   }
 
+  @scala.annotation.tailrec
   private def readBuffer(parsed: List[ByteString]): List[ByteString] = {
     if (byteBuffer.contains('\n') && validHead.exists(byteBuffer.contains)) {
       val start = byteBuffer.indexWhere(validHead.contains)

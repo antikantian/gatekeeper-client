@@ -69,7 +69,9 @@ class ClientActor extends Actor with ActorLogging {
     case Received(bs) => responseActor ! bs
     case op@Operation(request, promise) => onOperationReceived(op)
     case WriteAck => onWriteAck()
-    case CommandFailed(cmd) => log.info("Failed: " + cmd)
+    case CommandFailed(cmd) =>
+      log.warning("Failed: " + cmd.toString)
+      gate ! cmd
     case Beat => onHeartbeatReceived()
     case CheckHeartbeat => checkHeartBeat()
     case PeerClosed => scheduleReconnect(Reconnect())
