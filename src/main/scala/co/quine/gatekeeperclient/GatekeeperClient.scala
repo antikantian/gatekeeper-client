@@ -37,7 +37,7 @@ object GatekeeperClient {
     val typeId = '?'
     val uuid = java.util.UUID.randomUUID.toString
 
-    def serialize = s"$typeId|#$uuid|$cmd:$args"
+    def serialize = s"$typeId|#$uuid|$cmd:$args\n"
   }
 
   case class RateLimitUpdate(key: String, resource: String, remaining: Int, reset: Long) {
@@ -96,6 +96,32 @@ class GatekeeperClient(actorSystem: Option[ActorSystem] = None) {
   def followersList: Token = get(Request("GRANT", "FOLIST"))
 
   def remaining(resource: String): Int = get[Remaining](Request("REM", resource.toUpperCase)).num
+
+  def testCommand: Future[ConsumerToken] = {
+    val promise = Promise[ConsumerToken]()
+    clientActor ! Operation(Request("CONSUMER"), promise)
+    promise.future
+  }
+
+  def testSpeed(requests: Int = 100000) = {
+    def futures = Future.sequence(List.fill(requests)(testOps))
+
+    def testOps = {
+      val promise = Promise[ConsumerToken]()
+      clientActor ! Operation(Request("CONSUMER"), promise)
+      promise.future
+    }
+
+    def timed[T](f: => T): Double = {
+      val start = System.nanoTime
+      f
+      (System.nanoTime - start) / 1000000000.0
+    }
+
+    val elapsed = timed(Await.result(futures, 10.seconds))
+
+    println(s"$requests completed in $elapsed seconds, ${requests.toDouble / elapsed} ops/sec")
+  }
 
   def ttl(resource: String): Long = get[TTL](Request("TTL", resource.toUpperCase)).time
 

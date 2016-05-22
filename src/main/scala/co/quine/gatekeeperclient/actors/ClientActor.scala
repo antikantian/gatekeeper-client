@@ -4,7 +4,7 @@ package actors
 import akka.actor._
 import akka.io.{IO, Tcp}
 import akka.io.Tcp._
-import akka.util.ByteString
+import akka.util.{ByteString, ByteStringBuilder}
 import com.github.nscala_time.time.Imports.DateTime
 
 import java.net.InetSocketAddress
@@ -19,7 +19,9 @@ object ClientActor {
     def next = Reconnect(when * 2, attempt + 1)
   }
 
-  case object CheckHeartBeat
+  case object CheckHeartbeat
+  case object Beat
+  case object WriteAck extends Event
 
   def props = Props(new ClientActor)
 }
@@ -35,125 +37,108 @@ class ClientActor extends Actor with ActorLogging {
   val port = Config.port
   val tcpActor = IO(Tcp)(context.system)
 
-  val pendingRequests = mutable.ArrayBuffer[Operation[GateReply]]()
-
-  val requestQueue = mutable.Queue[Operation[GateReply]]()
+  val opBuffer = mutable.ArrayBuffer[Operation[GateReply]]()
+  val disconnectBuffer = mutable.ArrayBuffer[Any]()
 
   var gate: ActorRef = _
+  var responseActor: ActorRef = _
 
-  var heartbeatChecker = context.system.scheduler.schedule(15.seconds, 10.seconds, self, CheckHeartBeat)
   var lastHeartbeat: DateTime = _
   var missedHeartbeats = 0
 
+  var socketWritable: Boolean = false
+
   override def preStart() = {
     if (gate != null) gate ! Close
-    log.debug(s"Connecting to $host")
+    log.info(s"Connecting to $host")
     tcpActor ! Connect(new InetSocketAddress(host, port))
+    responseActor = context.actorOf(ResponseActor.props(self), s"${self.path.name}-response")
+    context.watch(responseActor)
+    context.system.scheduler.scheduleOnce(15.seconds, self, CheckHeartbeat)
   }
 
-  def receive = connecting
+  def receive = notConnected
 
-  def connecting: Receive = {
-    case c: Connected =>
-      gate = sender()
-      gate ! Register(self)
-      log.debug("Connected to: " + c.remoteAddress)
-      context.become(connected)
+  def notConnected: Receive = {
+    case conn: Connected => onConnect(sender, conn.remoteAddress)
+    case reconn: Reconnect => onReconnectRequest()
+    case other => disconnectBuffer += other
   }
 
-  def reconnecting(stats: Reconnect): Receive = {
-    case r: Reconnect =>
-      gate ! Close
-      tcpActor ! Connect(new InetSocketAddress(host, port))
-      log.warning(s"Attempting to reconnect to $host")
-    case c: Connected =>
-      gate = sender()
-      gate ! Register(self)
-      log.info(s"Reconnection to $host successful")
-      missedHeartbeats = 0
-      if (heartbeatChecker.isCancelled) {
-        heartbeatChecker = context.system.scheduler.schedule(15.seconds, 10.seconds, self, CheckHeartBeat)
-      }
-      context.become(connected)
-      requestQueue.foreach(self ! _)
-    case CommandFailed(cmd) => cmd match { case c: Connect => scheduleReconnect(stats.next) }
-    case op: Operation[GateReply] => requestQueue.enqueue(op)
+  def connected: Receive = {
+    case Received(bs) => responseActor ! bs
+    case op@Operation(request, promise) => onOperationReceived(op)
+    case WriteAck => onWriteAck()
+    case CommandFailed(cmd) => log.info("Failed: " + cmd)
+    case Beat => onHeartbeatReceived()
+    case CheckHeartbeat => checkHeartBeat()
+    case PeerClosed => scheduleReconnect(Reconnect())
+    case other => log.info("Unknown: " + other)
   }
 
-  def connected: Receive = tcp orElse operation
-
-  def tcp: Receive = {
-    case Received(bs) =>
-      log.debug("Received: " + bs.utf8String)
-      onData(bs)
+  def onConnect(sender: ActorRef, remote: InetSocketAddress) = {
+    gate = sender
+    gate ! Register(self)
+    log.info("Connected to: " + remote)
+    socketWritable = true
+    checkDisconnectBuffer()
+    context.become(connected)
   }
 
-  def operation: Receive = {
-    case op: Operation[GateReply] =>
-      pendingRequests.append(op)
-      gate ! Write(ByteString(op.request.serialize))
-    case CheckHeartBeat => checkHeartBeat()
-  }
-
-  def onData(bs: ByteString) = bs.head match {
-    case '~' => onHeartbeatReceived()
-    case '!' => onResponse(bs.utf8String)
-    case '-' => onError(bs.utf8String)
-  }
-
-  def onError(e: String) = e.split('|') match {
-    case Array(typeId, uuid, reason, message) => reason match {
-      case "RATELIMIT" => pendingRequests collect {
-        case x if x.request.uuid == uuid => x.promise.success(RateLimitReached(message.toLong))
-      }
-    }
+  def onReconnectRequest(): Unit = {
+    gate ! Close
+    tcpActor ! Connect(new InetSocketAddress(host, port))
+    log.info(s"Attempting reconnection to $host")
   }
 
   def onHeartbeatReceived() = {
     lastHeartbeat = DateTime.now
+    missedHeartbeats = 0
   }
 
-  def onResponse(r: String) = r.split('|') match {
-    case Array(typeId, uuid, payload) =>
-      val response = payload.head match {
-        case '&' | '@' | '%' => parseToken(payload)
-        case '+' => parseUpdate(payload.tail)
-        case '*' => Unavailable(payload.tail.toLong)
+  def onOperationReceived(op: Operation[GateReply]) = socketWritable match {
+    case true =>
+      val serializedOp = op.request.serialize
+      responseActor ! op
+      gate ! Write(ByteString(serializedOp), WriteAck)
+      socketWritable = false
+    case false => opBuffer += op
+  }
+
+  def onWriteAck() = {
+    if (opBuffer.nonEmpty) {
+      val compoundByteString = opBuffer.foldLeft(new ByteStringBuilder()) { (bs, op) =>
+        responseActor ! op
+        bs ++= ByteString(op.request.serialize)
       }
-      pendingRequests collect {
-        case x if x.request.uuid == uuid.tail => x.promise.success(response)
-      }
+      opBuffer.clear()
+      gate ! Write(compoundByteString.result, WriteAck)
+    } else socketWritable = true
+  }
+
+  private def checkDisconnectBuffer() = {
+    val rand = scala.util.Random
+    disconnectBuffer foreach { msg =>
+      val when = rand.nextInt(5)
+      context.system.scheduler.scheduleOnce(when.seconds, self, msg)
+    }
   }
 
   private def checkHeartBeat() = {
     if (lastHeartbeat == null || (DateTime.now.getMillis - lastHeartbeat.getMillis) > 10000) {
       missedHeartbeats += 1
-      log.warning(s"Missed heartbeat, count: $missedHeartbeats")
+      log.warning(s"Missed $missedHeartbeats heartbeat(s)")
 
-      if (missedHeartbeats >= 5) scheduleReconnect(Reconnect())
-    } else {
-      missedHeartbeats = 0
-    }
-  }
-
-  private def parseToken(t: String) = t.head match {
-    case '&' => t.tail.split(':') match { case Array(x, y) => ConsumerToken(x, y) }
-    case '@' => t.tail.split(':') match { case Array(x, y) => AccessToken(x, y) }
-    case '%' => BearerToken(t.tail)
-  }
-
-  private def parseUpdate(u: String) = u.split(':') match {
-    case Array(update, payload) => update match {
-      case "CLIENTS" => ConnectedClients(payload.split(',').toSeq)
-      case "REM" => Remaining(payload.toInt)
-      case "TTL" => TTL(payload.toLong)
+      if (missedHeartbeats >= 5) {
+        scheduleReconnect(Reconnect())
+      } else context.system.scheduler.scheduleOnce(10.seconds, self, CheckHeartbeat)
     }
   }
 
   private def scheduleReconnect(reconnect: Reconnect) = {
     log.info(s"Attempting reconnect in ${reconnect.when}, this is attempt ${reconnect.attempt}")
-    heartbeatChecker.cancel()
     context.system.scheduler.scheduleOnce(reconnect.when, self, reconnect)
-    context.become(reconnecting(reconnect))
+    context.become(notConnected)
   }
+
 }
